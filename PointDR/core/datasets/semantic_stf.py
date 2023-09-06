@@ -7,6 +7,7 @@ from torchsparse.utils.quantize import sparse_quantize
 
 __all__ = ['SemanticSTF']
 
+# 
 learning_map = {
     0: 255,  # "unlabeled",
     1: 0,  # "car",
@@ -127,6 +128,7 @@ class SemanticSTFInternal:
         if self.sample_stride > 1:
             self.files = self.files[::self.sample_stride]
 
+        # 不同数据集之间的label对应???
         remap_dict = learning_map
         max_key = max(remap_dict.keys())
         remap_lut = np.ones((max_key + 100), dtype=np.int32) * 255
@@ -177,6 +179,7 @@ class SemanticSTFInternal:
         else:
             all_labels = np.zeros(pc_.shape[0]).astype(np.int32)
 
+        # label映射<<<<<<<<<<<<<<<<
         labels_ = self.label_map[all_labels].astype(np.int64)
 
         feat_ = block

@@ -168,16 +168,17 @@ class MinkUNet_DR(nn.Module):
         self.weight_initialization()
         self.dropout = nn.Dropout(0.3, True)
 
-        # projection head
+        # projection head<<<<<<<<<<<<<<<<<<
         self.proj = nn.Sequential(
             nn.Linear(cs[8], cs[8]),
             nn.ReLU(inplace=True),
-            nn.Linear(cs[8], 128))
+            nn.Linear(cs[8], 128)) # 输出维度128（每个类128）
 
         # create the momentum memory bank to save prototypes
         self.m = 0.99  # momentum update rate
+        # 得到了一个新的张量，这个张量会保存在model.state_dict()中，也就可以随着模型一起通过.cuda()复制到gpu上。
         self.register_buffer("memo_bank", torch.randn(kwargs['num_classes'], 128))
-        self.memo_bank = self.memo_bank * 0.
+        self.memo_bank = self.memo_bank * 0. # 
 
     @torch.no_grad()
     def momentum_update_key_encoder(self, feat, init=False):
@@ -220,5 +221,5 @@ class MinkUNet_DR(nn.Module):
 
         out = self.classifier(y4.F)
 
-        feat = self.proj(y4.F)
+        feat = self.proj(y4.F)# 投影<<<<<<<<<<<<<<<<<<
         return out, feat

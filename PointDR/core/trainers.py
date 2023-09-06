@@ -55,6 +55,7 @@ class SemanticSTFTrainer(Trainer):
         self.dataflow.worker_init_fn = lambda worker_id: np.random.seed(
             self.seed + (self.epoch_num - 1) * self.num_workers + worker_id)
 
+    # 两个输入
     def _run_step(self, feed_dict: Dict[str, Any]) -> Dict[str, Any]:
         _inputs = {}
         for key, value in feed_dict.items():
@@ -64,7 +65,7 @@ class SemanticSTFTrainer(Trainer):
         inputs_1 = _inputs['lidar']
         targets_1 = feed_dict['targets'].F.long().cuda(non_blocking=True)
         with amp.autocast(enabled=self.amp_enabled):
-            outputs_1, feat_1 = self.model(inputs_1)
+            outputs_1, feat_1 = self.model(inputs_1) # 输入1<<<<<<<<<<<<<<<<<<<<
             if outputs_1.requires_grad:
                 loss_1 = self.criterion(outputs_1, targets_1)
 
@@ -72,27 +73,29 @@ class SemanticSTFTrainer(Trainer):
             # consistency loss
             inputs_2 = _inputs['lidar_2']
             targets_2 = feed_dict['targets_2'].F.long().cuda(non_blocking=True)
-            pred_2, feat_2 = self.model(inputs_2)
+            pred_2, feat_2 = self.model(inputs_2) # 输入2<<<<<<<<<<<<<<<<<<<<
             # ---- point-wise infoNCE loss -----
             # step 1: get mean feature (prototypes) for each class in weak view
             feat_1 = nn.functional.normalize(feat_1, dim=1)
             feat_2 = nn.functional.normalize(feat_2, dim=1)
             feat1_proto = torch.zeros((configs.data.num_classes, feat_1.shape[1]))
+            # 类别
             for ii in range(configs.data.num_classes):
                 mask = (targets_1 == ii)
                 if mask.sum():
-                    feat1_proto[ii] = feat_1[mask].mean(dim=0)
+                    feat1_proto[ii] = feat_1[mask].mean(dim=0) # feat1的
             feat1_proto = (feat1_proto + 1e-8).cuda()
             # step 2: get similarity
-            logits = torch.mm(feat_2, self.model.memo_bank.T.detach())
+            # torch.mm矩阵a和b矩阵相乘，比如a的维度是(1, 2)，b的维度是(2, 3)，返回的就是(1, 3)的矩阵。
+            logits = torch.mm(feat_2, self.model.memo_bank.T.detach())#（Nx128）(128xnum_classes)
             logits /= self.T  # apply temperature
             loss_2 = self.criterion(logits, targets_2)  # ignore 255
 
-            # momentum update memory bank
+            # momentum update memory bank（通过feat1_proto直接更新self.model.memo_bank，不进行梯度传播）
             self.model.momentum_update_key_encoder(feat1_proto, init=(self.global_step==1))
 
             # final loss
-            loss = loss_1 + self.lamda * loss_2
+            loss = loss_1 + self.lamda * loss_2  # 多加了一个loss
 
             self.summary.add_scalar('loss', loss.item())
             self.summary.add_scalar('loss_1', loss_1.item())

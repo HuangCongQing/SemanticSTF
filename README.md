@@ -1,5 +1,15 @@
 # 3D Semantic Segmentation in the Wild: Learning Generalized Models for Adverse-Condition Point Clouds
 
+Note：
+* note：https://www.yuque.com/huangzhongqing/bhwkeb/ogmf9ml88o6mybqt#lxJw2
+* paper：https://readpaper.com/pdf-annotate/note?pdfId=4740820009794682881&noteId=1947620385568569856
+
+
+
+
+
+---
+
 The official implementation of "3D Semantic Segmentation in the Wild: Learning Generalized Models for Adverse-Condition Point Clouds". (CVPR 2023) :fire::fire::fire:
 
 :fire: For more information follow the [PAPER](https://arxiv.org/abs/2304.00690) link!:fire:

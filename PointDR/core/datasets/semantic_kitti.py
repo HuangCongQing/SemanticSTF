@@ -188,7 +188,7 @@ class SemanticKITTIInternal:
         labels_ = self.label_map[all_labels & 0xFFFF].astype(np.int64)
 
         #######################
-        # original view #
+        # original view # adopt the simple random rotation and random scaling.
         #######################
         block_1 = block_.copy()
         theta = np.random.uniform(0, 2 * np.pi)
@@ -218,7 +218,7 @@ class SemanticKITTIInternal:
         inverse_map = SparseTensor(inverse_map, pc_1_)
 
         #######################
-        #    augmented view   #
+        #    augmented view   #====================================================
         #######################
         block_2 = block_.copy()
         labels_2 = labels_.copy()
@@ -293,7 +293,7 @@ class SemanticKITTIInternal:
         }
 
     def __getitem__(self, index):
-       # return double views for contrastive learning
+       # return double views for contrastive learning对比学习
        return self.return_double_views(index)
 
 

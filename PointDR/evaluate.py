@@ -9,11 +9,35 @@ import torch.nn
 import torch.utils.data
 from torchpack import distributed as dist
 from torchpack.utils.config import configs
-from torchpack.utils.logging import logger
 from tqdm import tqdm
 
 from core import builder
 from core.callbacks import MeanIoU
+
+def count_weather(data_root):
+    # get all weather info
+    dense_fog_list = []
+    light_fog_list = []
+    snow_list = []
+    rain_list = []
+    file = open(data_root+'/val/val.txt', 'r')
+    file_names = file.readlines()
+    file.close()
+    for path in file_names:
+        name = path.split(',')[0]
+        weather = path.split(',')[1].split('\n')[0]
+        if weather == 'dense_fog':
+              dense_fog_list.append(name)
+        elif weather == 'light_fog':
+              light_fog_list.append(name)
+        elif weather == 'snow':
+              snow_list.append(name)
+        elif weather == 'rain':
+              rain_list.append(name)
+        else:
+            raise ValueError
+
+    return dense_fog_list, light_fog_list, snow_list, rain_list
 
 
 class MeanIoU_cus(MeanIoU):
@@ -56,8 +80,10 @@ class MeanIoU_cus(MeanIoU):
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'summary'):
             self.trainer.summary.add_scalar(self.name, miou * 100)
         else:
-            print(ious)
-            print(miou)
+            ious_ = ['{:.1f}'.format(x*100) for x in ious]
+            ious_ = ' & '.join(ious_)
+            print(ious_)
+            print(miou*100)
         return miou, ious
 
 
@@ -71,7 +97,6 @@ def main() -> None:
     parser.add_argument('config', metavar='FILE', help='config file')
     parser.add_argument('--checkpoint_path', help='checkpoint_path')
     parser.add_argument('--name', type=str, default='minkunet', help='model name')
-    parser.add_argument('--save_pred', type=str, default=None, help='save prediction dir, do not save if none')
     args, opts = parser.parse_known_args()
 
     configs.load(args.config, recursive=True)
@@ -104,13 +129,18 @@ def main() -> None:
     model = model.cuda()
     print("\nModel loaded from {}\n".format(checkpoint_path))
 
-    mIoU = MeanIoU_cus(name=f'iou/test_' + checkpoint_path, num_classes=configs.data.num_classes, ignore_label=configs.data.ignore_label)
-    mIoU.before_epoch()
+    dense_fog_list, light_fog_list, snow_list, rain_list = count_weather(data_root=configs.tgt_dataset.root)
+
+    mIoU_dense_fog = MeanIoU_cus(name=f'iou/test_dense_fog_' + checkpoint_path, num_classes=configs.data.num_classes, ignore_label=configs.data.ignore_label)
+    mIoU_light_fog = MeanIoU_cus(name=f'iou/test_light_fog_' + checkpoint_path, num_classes=configs.data.num_classes, ignore_label=configs.data.ignore_label)
+    mIoU_rain = MeanIoU_cus(name=f'iou/test_rain_' + checkpoint_path, num_classes=configs.data.num_classes, ignore_label=configs.data.ignore_label)
+    mIoU_snow = MeanIoU_cus(name=f'iou/test_snow_' + checkpoint_path, num_classes=configs.data.num_classes, ignore_label=configs.data.ignore_label)
+    mIoU_dense_fog.before_epoch()
+    mIoU_light_fog.before_epoch()
+    mIoU_rain.before_epoch()
+    mIoU_snow.before_epoch()
 
     model.eval()
-
-    if args.save_pred is not None:
-        os.makedirs(args.save_pred)
 
     for feed_dict in tqdm(dataflow['test'], desc='eval'):
         _inputs = {}
@@ -138,22 +168,60 @@ def main() -> None:
         targets = torch.cat(_targets, 0)
         output_dict = {'outputs': outputs, 'targets': targets}
         # trainer.after_step(output_dict)
-        mIoU.after_step(output_dict)
-
-        if args.save_pred is not None:
-            outputs_np = outputs.cpu().numpy().astype(np.int32)
-            filename = feed_dict['file_name']
-            filename = os.path.basename(filename[0]).replace('.bin', '.label')
-            outputs_np.tofile(args.save_pred+'/'+filename)
+        file_name = feed_dict['file_name']
+        file_name = os.path.basename(file_name[0]).split('.')[0]
+        if file_name in dense_fog_list:
+            mIoU_dense_fog.after_step(output_dict)
+        elif file_name in light_fog_list:
+            mIoU_light_fog.after_step(output_dict)
+        elif file_name in rain_list:
+            mIoU_rain.after_step(output_dict)
+        elif file_name in snow_list:
+            mIoU_snow.after_step(output_dict)
+        else:
+            raise ValueError
 
     # trainer.after_epoch()
-    miou, ious = mIoU.after_epoch()
+    print("===" * 10)
+    print('Dense_fog')
+    miou_dense_fog, ious = mIoU_dense_fog.after_epoch()
+    print(ious)
+    ious = np.asarray(ious)
+    mask = (ious != 1)
+    ious = ious[mask]
+    print("Valid class num: ", mask.sum())
+    miou_dense_fog = ious.mean()
+    print("===" * 10)
+    print('Light_fog')
+    miou_light_fog, ious = mIoU_light_fog.after_epoch()
+    print(ious)
+    ious = np.asarray(ious)
+    mask = (ious != 1)
+    ious = ious[mask]
+    miou_light_fog = ious.mean()
+    print("Valid class num: ", mask.sum())
+    print("===" * 10)
+    print('Rain')
+    miou_rain, ious = mIoU_rain.after_epoch()
+    print(ious)
+    ious = np.asarray(ious)
+    mask = (ious != 1)
+    ious = ious[mask]
+    miou_rain = ious.mean()
+    print("Valid class num: ", mask.sum())
+    print("===" * 10)
+    print('Snow')
+    miou_snow, ious = mIoU_snow.after_epoch()
+    print(ious)
+    ious = np.asarray(ious)
+    mask = (ious != 1)
+    ious = ious[mask]
+    miou_snow = ious.mean()
+    print("Valid class num: ", mask.sum())
 
     print("===" * 10)
-    print(dataset)
-    print("iou per class: ", ious)
-    print("miou:", miou)
-    print("===" * 10)
+    print('dense_fog, light_fog, rain, snow: {:.1f} {:.1f} {:.1f} {:.1f}'
+          .format(miou_dense_fog*100, miou_light_fog*100, miou_rain*100, miou_snow*100))
 
 if __name__ == '__main__':
     main()
